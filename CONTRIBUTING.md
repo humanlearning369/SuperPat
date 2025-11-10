@@ -70,6 +70,4 @@ Checklist Before Submitting
 - [ ] Documented changes in commit message
 - [ ] No breaking changes (or clearly documented)
 
-Questions?
-
-Open an issue or contact team-aegisio@outlook.com
+Please send questions or report an issue: team-aegisio@outlook.com
