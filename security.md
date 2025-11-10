@@ -35,4 +35,4 @@ These tools proactively monitor dependencies and code for vulnerabilities.
 
 Notes
 
-This project is provided as-is. See LICENSE.md for details on usage and responsibilities.
+This project is provided as-is. See LICENSE for details on usage and responsibilities.
