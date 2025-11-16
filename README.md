@@ -4,7 +4,7 @@ QueryIOStatsAnalyzer_v2_4
 A field-ready T-SQL procedure that gives you a user-friendly/readable output on STATISTICS IO. Think in pages...
 /*
 ***************************************************************************
-QueryIOStatsAnalyzer v2.4 is part of SUPER PAT (Performance Analysis Tool)
+QueryIOStatsAnalyzer v2.4 is part of SUPER PAT (Performance Analysis Tool) - THIS SCRIPT AND SUPERPAT ARE A WORK IN PROGRESS...
 ***************************************************************************
 
 Copyright (C) 2025 Aegis-IO
