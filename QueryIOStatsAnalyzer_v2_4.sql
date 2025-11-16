@@ -268,7 +268,7 @@ BEGIN
                     WHEN @ConfidenceScore = 'LOW' AND @RowCount <= 10 AND @TotalLogicalReads > 1000
                         THEN N'Low-selectivity or non-sargable predicate suspected; consider index/predicate rewrite.'
                     WHEN @AccessPattern LIKE '%scan likely%' AND @CostPerRow > 5
-                        THEN N'Likely key-lookup overload; consider INCLUDE to cover SELECT list.'
+                        THEN N'I/O-heavy scan; consider indexing the filter column(s) and/or reducing the SELECT list (covering index/INCLUDE may help).'
                     WHEN @SpillDetected = 1
                         THEN N'Increase memory grant (row goals/stats) or add ORDER BY index to avoid sort/hash spill.'
                     ELSE N''
