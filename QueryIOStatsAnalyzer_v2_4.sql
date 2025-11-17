@@ -1,7 +1,8 @@
 USE [YOUR DATABASE NAME HERE]
 GO
 
-/****** Object:  StoredProcedure [dbo].[QueryIOStatsAnalyzer_v2_4]    Script Date: 02/11/2022 - 11/9/2025 10:58:21 PM ******
+/****** Object:  StoredProcedure [dbo].[QueryIOStatsAnalyzer_v2_4]    Script Date: 11/16/2025 5:53:43 PM 
+IMPORTANT NOTE: This procedure is still being tested. Please do your own research as well.
 ***************************************************************************
 Copyright (C) 2025 Aegis-IO
 ***************************************************************************
@@ -37,11 +38,13 @@ Repository: https://github.com/humanlearning369/SuperPat
 ***************************************************************************/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
-
+IF OBJECT_ID('dbo.QueryIOStatsAnalyzer_v2_4','P') IS NOT NULL
+    DROP PROCEDURE dbo.QueryIOStatsAnalyzer_v2_4;
+GO
+	
 CREATE PROCEDURE [dbo].[QueryIOStatsAnalyzer_v2_4]
     @TableName SYSNAME,                      -- must include schema to qualify (i.e.,  dbo.Table1)
     @LogicalReads BIGINT,                    -- get this from STATISTICS IO output -> 'logical reads'
@@ -76,7 +79,7 @@ BEGIN
         @SpillDetected BIT = 0,
         @BaseStructure VARCHAR(20),
         @ForwardedRecords BIGINT,
-        @Hint NVARCHAR(200),
+        @Hint NVARCHAR(MAX),
         @ResultSummary NVARCHAR(500),
         @TotalLogicalReads BIGINT
    
@@ -260,19 +263,84 @@ BEGIN
     -- hints
 	----------------------------------------------------------------------
 
-    SET @Hint = CASE 
-                    WHEN @IncludeLob = 1 AND @LobLogicalReads IS NULL
-                        THEN N'Warning: @IncludeLob=1 but @LobLogicalReads not provided; % touched may be inaccurate.'
-                    WHEN @ForwardedRecords > 0
-                        THEN N'Heap has forwarded records; consider rebuilding or adding a clustered index.'
-                    WHEN @ConfidenceScore = 'LOW' AND @RowCount <= 10 AND @TotalLogicalReads > 1000
-                        THEN N'Low-selectivity or non-sargable predicate suspected; consider index/predicate rewrite.'
-                    WHEN @AccessPattern LIKE '%scan likely%' AND @CostPerRow > 5
-                        THEN N'I/O-heavy scan; consider indexing the filter column(s) and/or reducing the SELECT list (covering index/INCLUDE may help).'
-                    WHEN @SpillDetected = 1
-                        THEN N'Increase memory grant (row goals/stats) or add ORDER BY index to avoid sort/hash spill.'
-                    ELSE N''
-                END
+    DECLARE @Hints TABLE (HintOrder INT, HintText NVARCHAR(500))
+	DECLARE @HintCount INT = 0
+
+	IF @IncludeLob = 1 AND @LobLogicalReads IS NULL
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'@IncludeLob = 1 but LOB reads not provided; % of table touched may be off. NOTE: Please do your own research as well.')
+	END
+
+	IF @ForwardedRecords IS NOT NULL AND @ForwardedRecords > 0
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'Heap has forwarded records; consider a clustered index or rebuild. NOTE: Please do your own research as well')
+	END
+	
+	--IF @ConfidenceScore = 'LOW'
+	--AND @RowCount <= 10
+	--AND @TotalLogicalReads > 1000
+	IF @RowCount <= 10 AND @TotalLogicalReads > 1000
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'Low-selectivity or non-sargable predicate suspected; check filters and indexing. NOTE: Please do your own research as well')
+	END
+
+	IF @AccessPattern LIKE '%scan likely%'
+		AND @CostPerRow IS NOT NULL
+		AND @CostPerRow > 5
+		AND @PctOfTable IS NOT NULL
+		AND @PctOfTable >= 50
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'I/O-heavy scan; consider indexing filter column(s) or making the predicate more selective. NOTE: Please do your own research as well')
+	END
+
+	IF (
+			@AccessPattern LIKE '%scan likely%'
+			OR @AccessPattern = 'Seek'
+		)
+	AND @CostPerRow IS NOT NULL
+	AND @CostPerRow > 10
+	AND (@PctOfTable IS NULL OR @PctOfTable < 50)
+	AND NOT (@RowCount <= 10 AND @TotalLogicalReads > 1000)
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'High pages-per-row; likely key lookups or wide scans. Consider a covering index with INCLUDE columns or trimming the SELECT list. NOTE: Please do your own research as well')
+	END
+
+	IF @SpillDetected = 1
+	BEGIN
+		SET @HintCount += 1
+		INSERT INTO @Hints VALUES
+			(@HintCount, N'Tempdb spill detected; review memory grant, row goals, stats, or add an ORDER BY/index to avoid sort/hash spills. NOTE: Please do your own research as well')
+	END
+
+	IF @HintCount = 0
+	BEGIN
+		SET @Hint = N''
+	END	
+	ELSE IF @HintCount = 1
+	BEGIN
+		SELECT @Hint = HintText
+		FROM @Hints
+		WHERE HintOrder = 1
+	END
+	ELSE
+	BEGIN    
+		SET @Hint = N''
+
+		SELECT @Hint = COALESCE(@Hint + CHAR(13) + CHAR(10), N'')
+					+ CAST(HintOrder AS NVARCHAR(2)) + N'. ' + HintText
+		FROM @Hints
+		ORDER BY HintOrder
+	END
 
     ----------------------------------------------------------------------
     -- res
@@ -345,6 +413,3 @@ BEGIN
         @ResultSummary                    AS ResultSummary
     
 END
-
-GO
-
